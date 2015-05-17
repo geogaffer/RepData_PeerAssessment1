@@ -1,5 +1,6 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
+title: "Reproducible Research:"
+subtitle: "Peer Assessment 1"
 output: 
   html_document:
     keep_md: true
@@ -7,23 +8,128 @@ output:
 
 
 ## Loading and preprocessing the data
+Data has been provided for this assignment as a zip file in the forked 
+directory.  The following code checks for the existance of the unzipped,
+csv format file and only unzips if the file is not present.  
+
+```{r init_libraries, results="hide"}
+require(dplyr)
+library(ggplot2)
+```
+
+Once the data is read, the date field, which originally is a character
+variable is converted to Date type by nterpreting it as YYYY-MM-DD. 
 
 ```{r}
 if (!file.exists("activity.csv")) {
+    print("unzipping...")
     unzip("activity.zip")
 }
+
 activity <- read.csv(file="./activity.csv")
+activity$date <- as.Date(activity$date, format='%Y-%m-%d')
+activity_df <- tbl_df(activity)
+activity_df$minint <- activity$interval %/% 100 * 60 + 
+    activity$interval %% 100
+activity_df$finterval <- as.factor(activity_df$minint)
+
 ```
 ## What is mean total number of steps taken per day?
 
+For this part of the assignment we were instructed that we "can ignore the 
+missing values". I understood this to mean that we did not need to perform 
+special handling of missing values rather than remove ("ignore") those records.
+Consequently, only default actions by the routines used for missing values will 
+have been included.  
+Okay, so talk about the grouping of the data...
 
+```{r}
+steps_by_day <- activity_df %>%
+    group_by(date) %>%
+    summarize(total = sum(steps))
+```
 
+more comments about the plot
+
+```{r}
+library(ggplot2)
+ggplot(steps_by_day, aes(x=total)) +
+    geom_histogram(binwidth=1000, colour="black", fill="white") +
+    xlab("Total Steps per Day") + ylab("count (days)") +
+    scale_y_continuous(breaks=c(2, 4, 6, 8, 10))
+```
+
+A quick look at the median and mean
+
+```{r}
+summary(steps_by_day$total)
+```
 ## What is the average daily activity pattern?
 
+Okay, so talk bout the grouping of the data, again...
 
+This time we want to look at activity variation through the day averaging all 
+dates together.
 
+```{r}
+#activity_df$finterval <- as.factor(activity_df$interval)
+
+steps_by_interval <- activity_df %>%
+    group_by(finterval) %>%
+    summarize(intavg = mean(steps, na.rm=TRUE))
+steps_by_interval$ival <- as.integer(steps_by_interval$finterval)
+
+ggplot(steps_by_interval, aes(ival, intavg)) +
+    geom_line()
+```
+
+The peak (or maximum interval) in the above graph is at:
+```{r}
+max(steps_by_interval$intavg)
+which.max(steps_by_interval$intavg)
+
+hour <- which.max(steps_by_interval$intavg)%/%12
+minute <- (which.max(steps_by_interval$intavg) %% 12) * 5
+print(sprintf("%d:%d", hour, minute), quote=FALSE)
+```
 ## Imputing missing values
 
+How many missing values do we have in the data?
+```{r}
+sum(is.na(activity_df$steps))
+sum(is.na(activity_df$steps))/nrow(activity_df)*100
+```
+This is a significant amount of the data - approximately 1 in 8 measurements is
+an NA.
 
+```{r}
+medsteps <- activity_df %>%
+    group_by(finterval) %>%
+    summarize(intmed = median(steps, na.rm=TRUE))
+
+activity_df2 <- activity_df
+
+for (i in 1:nrow(activity_df2)) {
+    if (is.na(activity_df2$steps[i])) {
+        activity_df2$steps[i] <- medsteps$intmed[activity_df2$minint[i]/5+1]
+    }
+}
+
+sum(is.na(activity_df2$steps))
+
+```
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+```{r}
+activity_df2$day <- weekdays(activity_df2$date)
+
+steps_by_weekday <- activity_df2 %>%
+    group_by(day, finterval) %>%
+    summarize(intavg = mean(steps, na.rm=TRUE))
+steps_by_weekday$ival <- as.integer(steps_by_weekday$finterval)
+
+ggplot(steps_by_weekday, aes(ival, intavg)) +
+    geom_line(aes(colour=day))
+
+```
